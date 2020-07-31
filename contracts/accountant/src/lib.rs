@@ -2,7 +2,7 @@
 #![feature(proc_macro_hygiene)]
 extern crate alloc;
 extern crate ontio_std as ostd;
-use ostd::abi::{Decoder, Encoder, Sink, Source};
+use ostd::abi::{Decoder, Encoder, Sink, Source,EventBuilder};
 use ostd::contract::{ong, ont, wasm};
 use ostd::database;
 use ostd::prelude::*;
@@ -37,7 +37,8 @@ fn get_mp_account() -> Address {
 /// `seller_acc` is seller address
 ///
 /// `fee_split_model` is the charging model that is agreed by the seller and MP
-fn set_fee_split_model(seller_acc: &Address, fee_split_model: FeeSplitModel) -> bool {
+fn set_fee_split_model(seller_acc: &Address, fsm_bytes: &[u8]) -> bool {
+    let fee_split_model = FeeSplitModel::from_bytes(fsm_bytes);
     assert!(fee_split_model.weight <= MAX_PERCENTAGE as u16);
     let mp = get_mp_account();
     assert!(check_witness(seller_acc) && check_witness(&mp));
@@ -47,6 +48,7 @@ fn set_fee_split_model(seller_acc: &Address, fee_split_model: FeeSplitModel) -> 
         utils::generate_fee_split_model_key(seller_acc),
         fee_split_model,
     );
+    EventBuilder::new().string("setFeeSplitModel").address(seller_acc).bytearray(fsm_bytes).notify();
     true
 }
 

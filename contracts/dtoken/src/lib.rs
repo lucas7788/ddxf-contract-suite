@@ -279,11 +279,13 @@ fn update_next_tt_id(new_id: U128) {
     database::put(KEY_TT_ID, new_id)
 }
 
-/// use token, the buyer of the token has the right to consume the token
+/// use token,
+///
+/// the buyer of the token has the right to consume the token
 ///
 /// `account` is the buyer address
 ///
-/// `resource_id` used to mark the only commodity in the chain
+/// `token_id` used to mark the only commodity in the chain
 ///
 /// `token_template_bytes` used to mark the only token
 ///
@@ -303,8 +305,13 @@ pub fn use_token(account: &Address, token_id: &[u8], n: U128) -> bool {
 }
 
 fn delete_token(account: &Address, token_id: &[u8]) -> bool {
-    assert!(check_witness(account) || check_witness(CONTRACT_COMMON.admin()));
     let template_id = get_template_id_by_token_id(token_id);
+    let info = database::get::<_, TokenTemplateInfo>(get_key(PRE_TT, token_template_id)).unwrap();
+    assert!(
+        check_witness(account) && &info.creator == account
+            || check_witness(CONTRACT_COMMON.admin())
+    );
+
     oep8::delete_token(token_id);
     let key = get_key(PRE_TT, template_id.as_slice());
     database::delete(key.as_slice());
@@ -351,6 +358,7 @@ pub fn use_token_by_agent(account: &Address, agent: &Address, token_id: &[u8], n
     EventBuilder::new()
         .string("useTokenByAgent")
         .address(account)
+        .address(agent)
         .bytearray(token_id)
         .number(n)
         .notify();
@@ -439,7 +447,7 @@ fn get_agent_balance(agent: &Address, token_id: &[u8]) -> U128 {
     database::get::<_, U128>(sink.bytes()).unwrap_or(0)
 }
 
-/// add_agents, this method append agents for the all token
+/// add_agents, this method append agents for the specified token
 ///
 /// `resource_id` used to mark the only commodity in the chain
 ///
