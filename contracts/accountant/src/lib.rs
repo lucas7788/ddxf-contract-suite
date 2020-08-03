@@ -2,7 +2,7 @@
 #![feature(proc_macro_hygiene)]
 extern crate alloc;
 extern crate ontio_std as ostd;
-use ostd::abi::{Decoder, Encoder, Sink, Source,EventBuilder};
+use ostd::abi::{Decoder, Encoder, EventBuilder, Sink, Source};
 use ostd::contract::{ong, ont, wasm};
 use ostd::database;
 use ostd::prelude::*;
@@ -48,7 +48,11 @@ fn set_fee_split_model(seller_acc: &Address, fsm_bytes: &[u8]) -> bool {
         utils::generate_fee_split_model_key(seller_acc),
         fee_split_model,
     );
-    EventBuilder::new().string("setFeeSplitModel").address(seller_acc).bytearray(fsm_bytes).notify();
+    EventBuilder::new()
+        .string("setFeeSplitModel")
+        .address(seller_acc)
+        .bytearray(fsm_bytes)
+        .notify();
     true
 }
 
@@ -69,14 +73,15 @@ fn get_fee_split_model(seller_acc: &Address) -> FeeSplitModel {
 /// `fee` is the cost of one share
 ///
 /// `n` is the number of shares purchased
-fn transfer_amount(
+pub fn transfer_amount(
     order_id_bytes: &[u8],
     buyer_acc: &Address,
     split_contract_address: &Address,
-    fee: Fee,
+    fee_bytes: &[u8],
     n: U128,
 ) -> bool {
     assert!(check_witness(buyer_acc));
+    let fee = Fee::from_bytes(fee_bytes);
     let amt = n.checked_mul(fee.count as U128).unwrap();
     let self_addr = address();
     assert!(transfer(
@@ -94,11 +99,19 @@ fn transfer_amount(
         n,
     };
     database::put(utils::generate_balance_key(order_id_bytes), info);
+    EventBuilder::new()
+        .string("transferAmount")
+        .bytearray(order_id_bytes)
+        .address(buyer_acc)
+        .address(split_contract_address)
+        .bytearray(fee_bytes)
+        .number(n)
+        .notify();
     true
 }
 
 /// query settle info by order id
-fn get_settle_info(order_id: &[u8]) -> SettleInfo {
+pub fn get_settle_info(order_id: &[u8]) -> SettleInfo {
     database::get::<_, SettleInfo>(utils::generate_balance_key(order_id))
         .unwrap_or(SettleInfo::default())
 }
@@ -108,7 +121,7 @@ fn get_settle_info(order_id: &[u8]) -> SettleInfo {
 /// `seller_acc` is the seller address, need the address signature
 ///
 /// `order_id` is the serialization result of OrderId
-fn settle(seller_acc: &Address, order_id: &[u8]) -> bool {
+pub fn settle(seller_acc: &Address, order_id: &[u8]) -> bool {
     assert!(check_witness(seller_acc));
     let self_addr = address();
     let mp = get_mp_account();
@@ -144,6 +157,11 @@ fn settle(seller_acc: &Address, order_id: &[u8]) -> bool {
         panic!("call split contract failed")
     }
     database::delete(utils::generate_balance_key(order_id));
+    EventBuilder::new()
+        .string("settle")
+        .address(seller_acc)
+        .bytearray(order_id)
+        .notify();
     true
 }
 
@@ -203,7 +221,7 @@ pub fn invoke() {
                 n,
             ));
         }
-        b"balanceOf" => {
+        b"getSettleInfo" => {
             let order_id_bytes = source.read().unwrap();
             sink.write(get_settle_info(order_id_bytes));
         }

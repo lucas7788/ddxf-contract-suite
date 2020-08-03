@@ -122,10 +122,10 @@ pub fn withdraw(key: &[u8], addr: &Address) -> bool {
         .iter()
         .position(|addr_amt| &addr_amt.to == addr)
         .expect("not found the addr");
-    let total = rp.addr_amt.iter().fold(0, |res, x| res + x.weight);
 
     let addr_amt = rp.addr_amt.get_mut(ind).unwrap();
     if addr_amt.has_withdraw == false {
+        let total = rp.addr_amt.iter().fold(0, |res, x| res + x.weight);
         let self_addr = address();
         let balance = get_balance(key);
         let temp = balance.checked_mul(addr_amt.weight as U128).unwrap();

@@ -84,6 +84,10 @@ impl Fee {
             count: 0,
         }
     }
+    pub fn from_bytes(data: &[u8]) -> Self {
+        let mut source = Source::new(data);
+        source.read().unwrap()
+    }
 }
 
 #[derive(Clone)]
