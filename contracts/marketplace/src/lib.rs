@@ -483,7 +483,7 @@ pub fn buy_dtoken_reward(
         ));
     }
     EventBuilder::new()
-        .string("buyDtoken")
+        .string("buyDtokenReward")
         .bytearray(resource_id)
         .number(n)
         .address(buyer_account)

@@ -4,7 +4,7 @@ extern crate alloc;
 extern crate common;
 extern crate ontio_std as ostd;
 use common::CONTRACT_COMMON;
-use ostd::abi::{Sink, Source};
+use ostd::abi::{EventBuilder, Sink, Source};
 use ostd::contract::wasm;
 use ostd::database;
 use ostd::prelude::*;
@@ -18,13 +18,18 @@ const DTOKEN_CONTRACT_ADDRESS: Address =
 
 const KEY_MP_CONTRACT: &[u8] = b"01";
 const KEY_DTOKEN_CONTRACT: &[u8] = b"02";
+const KEY_ADMIN: &[u8] = b"03";
+
+#[cfg(test)]
+mod test;
 
 fn get_mp_contract_addr() -> Address {
     database::get::<_, Address>(KEY_MP_CONTRACT).unwrap_or(MP_CONTRACT_ADDRESS)
 }
 
 fn set_mp_contract_addr(mp: &Address) -> bool {
-    assert!(check_witness(CONTRACT_COMMON.admin()));
+    let admin = get_admin();
+    assert!(check_witness(&admin));
     database::put(KEY_MP_CONTRACT, mp);
     true
 }
@@ -34,32 +39,22 @@ fn get_dtoken_contract_addr() -> Address {
 }
 
 fn set_dtoken_contract_addr(dtoken: &Address) -> bool {
-    assert!(check_witness(CONTRACT_COMMON.admin()));
+    let admin = get_admin();
+    assert!(check_witness(&admin));
     database::put(KEY_DTOKEN_CONTRACT, dtoken);
     true
 }
 
-fn freeze_and_publish(
-    old_resource_id: &[u8],
-    new_resource_id: &[u8],
-    resource_ddo_bytes: &[u8],
-    item_bytes: &[u8],
-    split_policy_param_bytes: &[u8],
-) -> bool {
-    let mp = get_mp_contract_addr();
-    verify_result(wasm::call_contract(&mp, ("freeze", (old_resource_id,))));
-    verify_result(wasm::call_contract(
-        &mp,
-        (
-            "dtokenSellerPublish",
-            (
-                new_resource_id,
-                resource_ddo_bytes,
-                item_bytes,
-                split_policy_param_bytes,
-            ),
-        ),
-    ));
+fn init(mp: &Address, dtoken: &Address) -> bool {
+    let admin = get_admin();
+    assert!(check_witness(&admin));
+    database::put(KEY_MP_CONTRACT, mp);
+    database::put(KEY_DTOKEN_CONTRACT, dtoken);
+    EventBuilder::new()
+        .string("init")
+        .address(mp)
+        .address(dtoken)
+        .notify();
     true
 }
 
@@ -81,11 +76,16 @@ pub fn buy_use_token(
     let dtoken = get_dtoken_contract_addr();
     verify_result(wasm::call_contract(
         &dtoken,
-        (
-            "useToken",
-            (resource_id, buyer_account, token_template_bytes, n),
-        ),
+        ("useToken", (buyer_account, token_template_bytes, n)),
     ));
+    EventBuilder::new()
+        .string("buyAndUseToken")
+        .bytearray(resource_id)
+        .number(n)
+        .address(buyer_account)
+        .address(payer)
+        .bytearray(token_template_bytes)
+        .notify();
     true
 }
 
@@ -95,23 +95,33 @@ pub fn buy_reward_and_use_token(
     buyer_account: &Address,
     payer: &Address,
     token_template_bytes: &[u8],
+    unit_price: U128,
 ) -> bool {
     //call market place
     let mp = get_mp_contract_addr();
     verify_result(wasm::call_contract(
         &mp,
-        ("buyDtoken", (resource_id, n, buyer_account, payer)),
+        (
+            "buyDtokenReward",
+            (resource_id, n, buyer_account, payer, unit_price),
+        ),
     ));
 
     //call dtoken
     let dtoken = get_dtoken_contract_addr();
     verify_result(wasm::call_contract(
         &dtoken,
-        (
-            "useToken",
-            (resource_id, buyer_account, token_template_bytes, n),
-        ),
+        ("useToken", (buyer_account, token_template_bytes, n)),
     ));
+    EventBuilder::new()
+        .string("buyRewardAndUseToken")
+        .bytearray(resource_id)
+        .number(n)
+        .address(buyer_account)
+        .address(payer)
+        .bytearray(token_template_bytes)
+        .number(unit_price)
+        .notify();
     true
 }
 
@@ -174,6 +184,17 @@ fn verify_result(res: Option<Vec<u8>>) {
     }
 }
 
+fn update_admin(new_admin: &Address) -> bool {
+    let admin = get_admin();
+    assert!(check_witness(&admin));
+    database::put(KEY_ADMIN, new_admin);
+    true
+}
+
+fn get_admin() -> Address {
+    database::get(KEY_ADMIN).unwrap_or(CONTRACT_COMMON.admin().clone())
+}
+
 #[no_mangle]
 fn invoke() {
     let input = runtime::input();
@@ -185,24 +206,24 @@ fn invoke() {
             let (code, vm_type, name, version, author, email, desc) = source.read().unwrap();
             sink.write(CONTRACT_COMMON.migrate(code, vm_type, name, version, author, email, desc));
         }
+        b"init" => {
+            let (mp, dtoken) = source.read().unwrap();
+            sink.write(init(mp, dtoken));
+        }
+        b"updateAdmin" => {}
         b"setDtokenContractAddr" => {
             let dtoken = source.read().unwrap();
             sink.write(set_dtoken_contract_addr(dtoken));
+        }
+        b"getDToken" => {
+            sink.write(get_dtoken_contract_addr());
         }
         b"setMpContractAddr" => {
             let mp = source.read().unwrap();
             sink.write(set_mp_contract_addr(mp));
         }
-        b"freezeAndPublish" => {
-            let (old_resource_id, new_resource_id, resource_ddo, item, split_policy_param_bytes) =
-                source.read().unwrap();
-            sink.write(freeze_and_publish(
-                old_resource_id,
-                new_resource_id,
-                resource_ddo,
-                item,
-                split_policy_param_bytes,
-            ));
+        b"getMP" => {
+            sink.write(get_mp_contract_addr());
         }
         b"buyAndUseToken" => {
             let (resource_id, n, buyer_account, payer, token_template_bytes) =
@@ -213,6 +234,18 @@ fn invoke() {
                 buyer_account,
                 payer,
                 token_template_bytes,
+            ));
+        }
+        b"buyRewardAndUseToken" => {
+            let (resource_id, n, buyer_account, payer, token_template_bytes, unit_price) =
+                source.read().unwrap();
+            sink.write(buy_reward_and_use_token(
+                resource_id,
+                n,
+                buyer_account,
+                payer,
+                token_template_bytes,
+                unit_price,
             ));
         }
         b"buyDtokensAndSetAgents" => {

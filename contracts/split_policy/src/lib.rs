@@ -72,6 +72,7 @@ pub fn register(key: &[u8], param_bytes: &[u8]) -> bool {
     EventBuilder::new()
         .string("register")
         .bytearray(key)
+        .bytearray(param_bytes)
         .notify();
     true
 }
