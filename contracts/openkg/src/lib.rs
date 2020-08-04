@@ -288,6 +288,7 @@ fn invoke() {
             panic!("openkg contract, not support method:{}", method)
         }
     }
+    runtime::ret(sink.bytes());
 }
 
 #[cfg(test)]
