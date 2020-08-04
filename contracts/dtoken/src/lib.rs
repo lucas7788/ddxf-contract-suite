@@ -306,7 +306,8 @@ pub fn use_token(account: &Address, token_id: &[u8], n: U128) -> bool {
 
 fn delete_token(account: &Address, token_id: &[u8]) -> bool {
     let template_id = get_template_id_by_token_id(token_id);
-    let info = database::get::<_, TokenTemplateInfo>(get_key(PRE_TT, token_template_id)).unwrap();
+    let info =
+        database::get::<_, TokenTemplateInfo>(get_key(PRE_TT, template_id.as_slice())).unwrap();
     assert!(
         check_witness(account) && &info.creator == account
             || check_witness(CONTRACT_COMMON.admin())
