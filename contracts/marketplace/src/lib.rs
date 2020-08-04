@@ -62,6 +62,11 @@ pub fn init(dtoken: &Address, split_policy: &Address) -> bool {
     assert!(check_witness(CONTRACT_COMMON.admin()));
     database::put(KEY_DTOKEN_CONTRACT, dtoken);
     database::put(KEY_SPLIT_POLICY_CONTRACT, split_policy);
+    EventBuilder::new()
+        .string("init")
+        .address(dtoken)
+        .address(split_policy)
+        .notify();
     true
 }
 

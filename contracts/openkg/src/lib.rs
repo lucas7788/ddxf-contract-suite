@@ -43,6 +43,11 @@ fn init(mp: &Address, dtoken: &Address) -> bool {
     assert!(check_witness(CONTRACT_COMMON.admin()));
     database::put(KEY_MP_CONTRACT, mp);
     database::put(KEY_DTOKEN_CONTRACT, dtoken);
+    EventBuilder::new()
+        .string("init")
+        .address(mp)
+        .address(dtoken)
+        .notify();
     true
 }
 
