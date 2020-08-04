@@ -3,6 +3,7 @@ use super::*;
 const KEY_FEE_SPLIT_MODEL: &[u8] = b"01";
 const KEY_BALANCE: &[u8] = b"02";
 pub const KEY_MP: &[u8] = b"03";
+pub const KEY_FEE_ADDR: &[u8] = b"04";
 
 pub fn generate_fee_split_model_key(account: &Address) -> Vec<u8> {
     [KEY_FEE_SPLIT_MODEL, account.as_ref()].concat()

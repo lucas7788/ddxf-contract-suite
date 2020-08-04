@@ -2,11 +2,11 @@
 #![feature(proc_macro_hygiene)]
 extern crate alloc;
 extern crate ontio_std as ostd;
-use ostd::abi::{Decoder, Encoder, EventBuilder, Sink, Source};
+use ostd::abi::{Decoder, Encoder, EventBuilder, Sink, Source, VmValueParser};
 use ostd::contract::{ong, ont, wasm};
 use ostd::database;
 use ostd::prelude::*;
-use ostd::runtime::{address, check_witness, input, ret};
+use ostd::runtime::{address, check_witness, contract_migrate, input, ret};
 use ostd::types::{Address, U128};
 
 mod utils;
@@ -91,7 +91,18 @@ pub fn transfer_amount(
         &fee.contract_type,
         Some(fee.contract_addr.clone()),
     ));
-
+    //更新fee地址
+    match fee.contract_type {
+        TokenType::OEP4 => {
+            assert_ne!(fee.contract_addr, Address::new([0u8; 20]));
+            let mut fee_addrs: Vec<Address> = database::get(KEY_FEE_ADDR).unwrap_or(vec![]);
+            if !fee_addrs.contains(&fee.contract_addr) {
+                fee_addrs.push(fee.contract_addr.clone());
+            }
+            database::put(KEY_FEE_ADDR, fee_addrs);
+        }
+        _ => {}
+    }
     //store information that split_contract needs
     let info = SettleInfo {
         split_contract_addr: split_contract_address.clone(),
@@ -192,6 +203,40 @@ fn transfer(
     true
 }
 
+fn migrate(
+    code: &[u8],
+    vm_type: u32,
+    name: &str,
+    version: &str,
+    author: &str,
+    email: &str,
+    desc: &str,
+) -> bool {
+    let new_addr = contract_migrate(code, vm_type, name, version, author, email, desc);
+    let self_addr = address();
+    let ba = ont::balance_of(&self_addr);
+    if ba > 0 {
+        assert!(ont::transfer(&self_addr, &new_addr, ba));
+    }
+    let ba = ong::balance_of(&self_addr);
+    if ba > 0 {
+        assert!(ong::transfer(&self_addr, &new_addr, ba));
+    }
+    let fee_addr: Vec<Address> = database::get(KEY_FEE_ADDR).unwrap_or(vec![]);
+    for addr in fee_addr.iter() {
+        let res = wasm::call_contract(addr, ("balanceOf", (&self_addr,))).unwrap();
+        let mut parser = VmValueParser::new(res.as_slice());
+        let ba = parser.number().unwrap_or_default();
+        if ba > 0 {
+            let res = wasm::call_contract(addr, ("transfer", (&self_addr, &new_addr, ba))).unwrap();
+            let mut source = Source::new(res.as_slice());
+            let r: bool = source.read().unwrap();
+            assert!(r);
+        }
+    }
+    true
+}
+
 #[no_mangle]
 pub fn invoke() {
     let input = input();
@@ -201,7 +246,7 @@ pub fn invoke() {
     match action {
         b"migrate" => {
             let (code, vm_type, name, version, author, email, desc) = source.read().unwrap();
-            sink.write(CONTRACT_COMMON.migrate(code, vm_type, name, version, author, email, desc));
+            sink.write(migrate(code, vm_type, name, version, author, email, desc));
         }
         b"setFeeSplitModel" => {
             let (seller_acc, fee_split_model) = source.read().unwrap();
