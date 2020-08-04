@@ -46,30 +46,6 @@ fn init(mp: &Address, dtoken: &Address) -> bool {
     true
 }
 
-fn freeze_and_publish(
-    old_resource_id: &[u8],
-    new_resource_id: &[u8],
-    resource_ddo_bytes: &[u8],
-    item_bytes: &[u8],
-    split_policy_param_bytes: &[u8],
-) -> bool {
-    let mp = get_mp_contract_addr();
-    verify_result(wasm::call_contract(&mp, ("freeze", (old_resource_id,))));
-    verify_result(wasm::call_contract(
-        &mp,
-        (
-            "dtokenSellerPublish",
-            (
-                new_resource_id,
-                resource_ddo_bytes,
-                item_bytes,
-                split_policy_param_bytes,
-            ),
-        ),
-    ));
-    true
-}
-
 pub fn buy_use_token(
     resource_id: &[u8],
     n: U128,
@@ -149,7 +125,7 @@ pub fn buy_reward_and_use_token(
 }
 
 fn buy_dtokens_and_set_agents(
-    resource_ids: Vec<&[u8]>,
+    resource_ids: Vec<Vec<u8>>,
     ns: Vec<U128>,
     use_index: U128,
     authorized_index: U128,
@@ -165,7 +141,10 @@ fn buy_dtokens_and_set_agents(
     for i in 0..l {
         verify_result(wasm::call_contract(
             &mp,
-            ("buyDToken", (resource_ids[i], ns[i], buyer_account, payer)),
+            (
+                "buyDToken",
+                (resource_ids[i].as_slice(), ns[i], buyer_account, payer),
+            ),
         ));
     }
     let dtoken = get_dtoken_contract_addr();
@@ -174,7 +153,7 @@ fn buy_dtokens_and_set_agents(
         (
             "setTokenAgents",
             (
-                resource_ids[authorized_index as usize],
+                resource_ids[authorized_index as usize].as_slice(),
                 buyer_account,
                 vec![agent.clone()],
                 authorized_token_template_ids,
@@ -187,13 +166,30 @@ fn buy_dtokens_and_set_agents(
         (
             "useToken",
             (
-                resource_ids[use_index as usize],
+                resource_ids[use_index as usize].as_slice(),
                 buyer_account,
                 use_template_id,
                 ns[use_index as usize],
             ),
         ),
     ));
+    let mut sink = Sink::new(64);
+    sink.write(resource_ids);
+
+    let mut sink2 = Sink::new(64);
+    sink2.write(ns);
+    EventBuilder::new()
+        .string("buyDtokensAndSetAgents")
+        .bytearray(sink.bytes())
+        .bytearray(sink2.bytes())
+        .number(use_index)
+        .number(authorized_index)
+        .bytearray(authorized_token_template_ids)
+        .bytearray(use_template_id)
+        .address(buyer_account)
+        .address(payer)
+        .address(agent)
+        .notify();
     true
 }
 
@@ -235,17 +231,6 @@ fn invoke() {
         b"init" => {
             let (mp, dtoken) = source.read().unwrap();
             sink.write(init(mp, dtoken));
-        }
-        b"freezeAndPublish" => {
-            let (old_resource_id, new_resource_id, resource_ddo, item, split_policy_param_bytes) =
-                source.read().unwrap();
-            sink.write(freeze_and_publish(
-                old_resource_id,
-                new_resource_id,
-                resource_ddo,
-                item,
-                split_policy_param_bytes,
-            ));
         }
         b"buyAndUseToken" => {
             let (resource_id, n, buyer_account, payer, token_template_id) = source.read().unwrap();
