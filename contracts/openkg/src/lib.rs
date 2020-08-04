@@ -4,7 +4,7 @@ extern crate alloc;
 extern crate common;
 extern crate ontio_std as ostd;
 use common::CONTRACT_COMMON;
-use ostd::abi::{Sink, Source};
+use ostd::abi::{EventBuilder, Sink, Source};
 use ostd::contract::wasm;
 use ostd::database;
 use ostd::prelude::*;
@@ -93,6 +93,14 @@ pub fn buy_use_token(
             &dtoken,
             ("useToken", (buyer_account, token_id, n)),
         ));
+        EventBuilder::new()
+            .string("buyAndUseToken")
+            .bytearray(resource_id)
+            .number(n)
+            .address(buyer_account)
+            .address(payer)
+            .bytearray(token_template_id)
+            .notify();
         true
     } else {
         false
@@ -128,6 +136,15 @@ pub fn buy_reward_and_use_token(
         &dtoken,
         ("useToken", (buyer_account, token_id, n)),
     ));
+    EventBuilder::new()
+        .string("buyRewardAndUseToken")
+        .bytearray(resource_id)
+        .number(n)
+        .address(buyer_account)
+        .address(payer)
+        .number(reward_uint_price)
+        .bytearray(token_template_id)
+        .notify();
     true
 }
 
