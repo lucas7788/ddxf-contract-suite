@@ -34,7 +34,7 @@ impl OrderId {
 pub struct TokenTemplate {
     pub data_id: Option<Vec<u8>>,
     pub token_hash: Vec<Vec<u8>>,
-    pub endpoint: Vec<u8>,
+    pub endpoint: Vec<u8>, //token service endpoint
 }
 
 impl TokenTemplate {
