@@ -10,8 +10,10 @@ use ontio_std::types::Address;
 #[test]
 fn test_registry3() {
     let data =
-        read_hex("01fbe02b027e61a6d7602f26cfa9487fa58ef9ee7288130000000100").unwrap_or_default();
+        read_hex("01fbe02b027e61a6d7602f26cfa9487fa58ef9ee72640000000102016d7e3b08bd73754a29634e02cc7a1e67f4c585c4").unwrap_or_default();
     let rp = RegisterParam::from_bytes(data.as_slice());
+    println!("{}", rp.contract_addr.is_some());
+    let a = 0;
 }
 
 #[test]
@@ -31,12 +33,12 @@ fn test_registry2() {
     let addr2 = Address::repeat_byte(2);
     let aa1 = AddrAmt {
         to: addr1,
-        percent: 1000,
+        weight: 1000,
         has_withdraw: false,
     };
     let aa2 = AddrAmt {
         to: addr2.clone(),
-        percent: 9000,
+        weight: 9000,
         has_withdraw: false,
     };
     let contract_addr = Address::repeat_byte(3);

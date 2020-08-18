@@ -72,6 +72,7 @@ pub fn register(key: &[u8], param_bytes: &[u8]) -> bool {
     EventBuilder::new()
         .string("register")
         .bytearray(key)
+        .bytearray(param_bytes)
         .notify();
     true
 }
@@ -95,6 +96,12 @@ pub fn transfer(from: &Address, key: &[u8], amt: U128) -> bool {
     let balance = get_balance(key);
     let balance = balance.checked_add(amt).unwrap();
     database::put(generate_balance_key(key), balance);
+    EventBuilder::new()
+        .string("transfer")
+        .address(from)
+        .bytearray(key)
+        .number(amt)
+        .notify();
     true
 }
 
@@ -107,6 +114,7 @@ pub fn get_balance(key: &[u8]) -> U128 {
 /// `key` is also called resource_id in the other contract
 ///
 /// `addr` is the address who withdraw token, need the address signature
+/// TODO
 pub fn withdraw(key: &[u8], addr: &Address) -> bool {
     assert!(check_witness(addr));
     let mut rp = get_register_param(key);
@@ -132,6 +140,11 @@ pub fn withdraw(key: &[u8], addr: &Address) -> bool {
         ));
         addr_amt.has_withdraw = true;
         database::put(generate_registry_param_key(key), rp);
+        EventBuilder::new()
+            .string("withdraw")
+            .bytearray(key)
+            .address(addr)
+            .notify();
         return true;
     } else {
         panic!("has withdraw")
@@ -153,10 +166,14 @@ pub fn transfer_withdraw(from: &Address, key: &[u8], amt: U128) -> bool {
                 &rp.token_type,
                 rp.contract_addr
             ));
-            addr_amt.has_withdraw = true;
         }
     }
-    database::put(generate_registry_param_key(key), rp);
+    EventBuilder::new()
+        .string("transferWithdraw")
+        .address(from)
+        .bytearray(key)
+        .number(amt)
+        .notify();
     true
 }
 

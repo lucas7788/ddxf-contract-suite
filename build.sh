@@ -1,4 +1,4 @@
-cd ./contracts/dtoken
+cd ./contracts/marketplace
 
 cargo build --release --target=wasm32-unknown-unknown
 
