@@ -1,6 +1,6 @@
-cd ./contracts/dtoken
+#cd ./contracts/dtoken
 #cd ./contracts/marketplace
-#cd ./contracts/openkg
+cd ./contracts/openkg
 #cd ./contracts/data_id
 #cd ./contracts/split_policy
 #cd ./contracts/accountant

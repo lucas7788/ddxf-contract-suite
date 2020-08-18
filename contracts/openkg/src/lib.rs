@@ -4,7 +4,7 @@ extern crate alloc;
 extern crate common;
 extern crate ontio_std as ostd;
 use common::CONTRACT_COMMON;
-use ostd::abi::{Sink, Source};
+use ostd::abi::{EventBuilder, Sink, Source};
 use ostd::contract::wasm;
 use ostd::database;
 use ostd::prelude::*;
@@ -43,30 +43,11 @@ fn init(mp: &Address, dtoken: &Address) -> bool {
     assert!(check_witness(CONTRACT_COMMON.admin()));
     database::put(KEY_MP_CONTRACT, mp);
     database::put(KEY_DTOKEN_CONTRACT, dtoken);
-    true
-}
-
-fn freeze_and_publish(
-    old_resource_id: &[u8],
-    new_resource_id: &[u8],
-    resource_ddo_bytes: &[u8],
-    item_bytes: &[u8],
-    split_policy_param_bytes: &[u8],
-) -> bool {
-    let mp = get_mp_contract_addr();
-    verify_result(wasm::call_contract(&mp, ("freeze", (old_resource_id,))));
-    verify_result(wasm::call_contract(
-        &mp,
-        (
-            "dtokenSellerPublish",
-            (
-                new_resource_id,
-                resource_ddo_bytes,
-                item_bytes,
-                split_policy_param_bytes,
-            ),
-        ),
-    ));
+    EventBuilder::new()
+        .string("init")
+        .address(mp)
+        .address(dtoken)
+        .notify();
     true
 }
 
@@ -81,21 +62,23 @@ pub fn buy_use_token(
     let mp = get_mp_contract_addr();
     verify_result(wasm::call_contract(
         &mp,
-        ("buyDToken", (resource_id, n, buyer_account, payer)),
+        ("buyDtoken", (resource_id, n, buyer_account, payer)),
     ));
     //call dtoken
     let dtoken = get_dtoken_contract_addr();
-    if let Some(r) = res {
-        let mut source = Source::new(r.as_slice());
-        let token_id: &[u8] = source.read().unwrap();
-        verify_result(wasm::call_contract(
-            &dtoken,
-            ("useToken", (buyer_account, token_template_bytes, n)),
-        ));
-        true
-    } else {
-        false
-    }
+    verify_result(wasm::call_contract(
+        &dtoken,
+        ("useToken", (buyer_account, token_template_bytes, n)),
+    ));
+    EventBuilder::new()
+        .string("buyAndUseToken")
+        .bytearray(resource_id)
+        .number(n)
+        .address(buyer_account)
+        .address(payer)
+        .bytearray(token_template_bytes)
+        .notify();
+    true
 }
 
 pub fn buy_reward_and_use_token(
@@ -111,7 +94,7 @@ pub fn buy_reward_and_use_token(
     verify_result(wasm::call_contract(
         &mp,
         (
-            "buyDTokenReward",
+            "buyDtokenReward",
             (resource_id, n, buyer_account, payer, reward_uint_price),
         ),
     ));
@@ -122,6 +105,15 @@ pub fn buy_reward_and_use_token(
         &dtoken,
         ("useToken", (buyer_account, token_template_bytes, n)),
     ));
+    EventBuilder::new()
+        .string("buyRewardAndUseToken")
+        .bytearray(resource_id)
+        .number(n)
+        .address(buyer_account)
+        .address(payer)
+        .number(reward_uint_price)
+        .bytearray(token_template_bytes)
+        .notify();
     true
 }
 
@@ -214,7 +206,8 @@ fn invoke() {
             sink.write(init(mp, dtoken));
         }
         b"buyAndUseToken" => {
-            let (resource_id, n, buyer_account, payer, token_template_bytes) = source.read().unwrap();
+            let (resource_id, n, buyer_account, payer, token_template_bytes) =
+                source.read().unwrap();
             sink.write(buy_use_token(
                 resource_id,
                 n,
