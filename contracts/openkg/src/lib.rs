@@ -75,7 +75,7 @@ pub fn buy_use_token(
     n: U128,
     buyer_account: &Address,
     payer: &Address,
-    token_template_id: &[u8],
+    token_template_bytes: &[u8],
 ) -> bool {
     //call market place
     let mp = get_mp_contract_addr();
@@ -85,13 +85,12 @@ pub fn buy_use_token(
     ));
     //call dtoken
     let dtoken = get_dtoken_contract_addr();
-    let res = wasm::call_contract(&dtoken, ("getTokenIdByTemplateId", (token_template_id,)));
     if let Some(r) = res {
         let mut source = Source::new(r.as_slice());
         let token_id: &[u8] = source.read().unwrap();
         verify_result(wasm::call_contract(
             &dtoken,
-            ("useToken", (buyer_account, token_id, n)),
+            ("useToken", (buyer_account, token_template_bytes, n)),
         ));
         true
     } else {
@@ -105,7 +104,7 @@ pub fn buy_reward_and_use_token(
     buyer_account: &Address,
     payer: &Address,
     reward_uint_price: U128,
-    token_template_id: &[u8],
+    token_template_bytes: &[u8],
 ) -> bool {
     //call market place
     let mp = get_mp_contract_addr();
@@ -119,14 +118,9 @@ pub fn buy_reward_and_use_token(
 
     //call dtoken
     let dtoken = get_dtoken_contract_addr();
-    //query token_id
-    let res =
-        wasm::call_contract(&dtoken, ("getTokenIdByTemplateId", (token_template_id,))).unwrap();
-    let mut source = Source::new(res.as_slice());
-    let token_id: &[u8] = source.read().unwrap();
     verify_result(wasm::call_contract(
         &dtoken,
-        ("useToken", (buyer_account, token_id, n)),
+        ("useToken", (buyer_account, token_template_bytes, n)),
     ));
     true
 }
@@ -137,7 +131,7 @@ fn buy_dtokens_and_set_agents(
     use_index: U128,
     authorized_index: U128,
     authorized_token_template_ids: &[u8],
-    use_template_id: &[u8],
+    use_template_bytes: &[u8],
     buyer_account: &Address,
     payer: &Address,
     agent: &Address,
@@ -172,7 +166,7 @@ fn buy_dtokens_and_set_agents(
             (
                 resource_ids[use_index as usize],
                 buyer_account,
-                use_template_id,
+                use_template_bytes,
                 ns[use_index as usize],
             ),
         ),
@@ -219,29 +213,18 @@ fn invoke() {
             let (mp, dtoken) = source.read().unwrap();
             sink.write(init(mp, dtoken));
         }
-        b"freezeAndPublish" => {
-            let (old_resource_id, new_resource_id, resource_ddo, item, split_policy_param_bytes) =
-                source.read().unwrap();
-            sink.write(freeze_and_publish(
-                old_resource_id,
-                new_resource_id,
-                resource_ddo,
-                item,
-                split_policy_param_bytes,
-            ));
-        }
         b"buyAndUseToken" => {
-            let (resource_id, n, buyer_account, payer, token_template_id) = source.read().unwrap();
+            let (resource_id, n, buyer_account, payer, token_template_bytes) = source.read().unwrap();
             sink.write(buy_use_token(
                 resource_id,
                 n,
                 buyer_account,
                 payer,
-                token_template_id,
+                token_template_bytes,
             ));
         }
         b"buyRewardAndUseToken" => {
-            let (resource_id, n, buyer_account, payer, unit_price, token_template_id) =
+            let (resource_id, n, buyer_account, payer, unit_price, token_template_bytes) =
                 source.read().unwrap();
             sink.write(buy_reward_and_use_token(
                 resource_id,
@@ -249,7 +232,7 @@ fn invoke() {
                 buyer_account,
                 payer,
                 unit_price,
-                token_template_id,
+                token_template_bytes,
             ));
         }
         b"buyDtokensAndSetAgents" => {
@@ -281,6 +264,7 @@ fn invoke() {
             panic!("openkg contract, not support method:{}", method)
         }
     }
+    runtime::ret(sink.bytes());
 }
 
 #[cfg(test)]
